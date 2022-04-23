@@ -35,8 +35,6 @@ class KStreamsApplication {
         val props = Properties()
         props[StreamsConfig.APPLICATION_ID_CONFIG] = "kstreams-application";
         props[StreamsConfig.BOOTSTRAP_SERVERS_CONFIG] = "localhost:9092";
-        props[StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG] = Serdes.String()::class.java;
-        props[StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG] = Serdes.String()::class.java;
 
         val topology = createTopology()
         val kafkaStreams = KafkaStreams(topology, props)
@@ -61,19 +59,19 @@ class KStreamsApplication {
     }
 
 
-    private fun createTopology() : Topology {
+    fun createTopology() : Topology {
         val streamBuilder = StreamsBuilder()
 
-        val inMemoryStore = Stores.keyValueStoreBuilder(Stores.inMemoryKeyValueStore("in-memory-store"), Serdes.String(), Serdes.serdeFrom(CustomerSerialiser(), CustomerDeserialiser()))
+        val inMemoryStore = Stores.keyValueStoreBuilder(Stores.inMemoryKeyValueStore("customer-store"), Serdes.Long(), Serdes.serdeFrom(CustomerSerialiser(), CustomerDeserialiser()))
         streamBuilder.addStateStore(inMemoryStore)
 
-        streamBuilder.stream("customers-events", Consumed.with(Serdes.Long(), Serdes.serdeFrom(CustomerSerialiser(), CustomerDeserialiser())))
+        streamBuilder.stream("customer-events", Consumed.with(Serdes.Long(), Serdes.serdeFrom(CustomerSerialiser(), CustomerDeserialiser())))
             .filterNot { _, value ->  value == null }
             .toTable()
-            .transformValues({ CustomValueTransformer() }, "in-memory-store")
+            .transformValues({ CustomValueTransformer() }, "customer-store")
             .toStream()
-            .filter { _, value -> value.prevTimestamp != null && value.prevTimestamp.isBefore(value.prevTimestamp.minus(5, ChronoUnit.DAYS)) }
-            .map { _, value -> KeyValue(value.id, CustomerActive(value.id, Duration.between(value.prevTimestamp, value.prevTimestamp).toDays(), value.timestamp)) }
+            .filter { _, value -> value.prevTimestamp != null && value.prevTimestamp.isBefore(value.timestamp.minus(5, ChronoUnit.DAYS)) }
+            .map { _, value -> KeyValue(value.id, CustomerActive(value.id, Duration.between(value.prevTimestamp, value.timestamp).toDays(), value.timestamp)) }
             .to("active-customers", Produced.with(Serdes.Long(), Serdes.serdeFrom(CustomerActiveSerialiser(), CustomerActiveDeserialiser())))
 
         return streamBuilder.build()
@@ -84,7 +82,7 @@ class KStreamsApplication {
         lateinit var state: KeyValueStore<Long, CustomerEvent>
 
         override fun init(context: ProcessorContext) {
-            val stateStore: KeyValueStore<Long, CustomerEvent> = context.getStateStore("in-memory-store")
+            val stateStore: KeyValueStore<Long, CustomerEvent> = context.getStateStore("customer-store")
             state = stateStore
         }
 
@@ -150,7 +148,7 @@ class KStreamsApplication {
 
         override fun deserialize(topic: String?, customerActive: ByteArray?): CustomerActive? {
             return try {
-                jacksonObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false).registerModule(JavaTimeModule()).readerFor(CustomerEvent::class.java).readValue<CustomerActive>(customerActive)
+                jacksonObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false).registerModule(JavaTimeModule()).readerFor(CustomerActive::class.java).readValue<CustomerActive>(customerActive)
             } catch (e: JsonProcessingException) {
                 logger.error("Unable to serialise active customer {}", customerActive, e)
                 null

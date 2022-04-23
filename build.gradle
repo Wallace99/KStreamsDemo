@@ -1,12 +1,21 @@
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '1.6.10'
+    id "io.spring.dependency-management" version "1.0.11.RELEASE"
 }
+
+apply plugin:"io.spring.dependency-management"
 
 group 'org.example'
 version '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
+}
+
+dependencyManagement {
+    imports {
+        mavenBom 'org.junit:junit-bom:5.8.0'
+    }
 }
 
 dependencies {
@@ -16,4 +25,15 @@ dependencies {
     implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310"
     implementation 'org.apache.logging.log4j:log4j-core:2.17.2'
     implementation 'org.apache.logging.log4j:log4j-api:2.17.2'
+    testImplementation "org.junit.jupiter:junit-jupiter-api"
+    testImplementation "org.junit.jupiter:junit-jupiter-engine"
+    testImplementation "org.junit.jupiter:junit-jupiter-params"
+    testImplementation "org.junit.platform:junit-platform-launcher"
+    testImplementation "org.junit.platform:junit-platform-engine"
+    testImplementation "org.apache.kafka:kafka-streams-test-utils:3.1.0"
+    testImplementation 'org.assertj:assertj-core:3.22.0'
+}
+
+test {
+    useJUnitPlatform()
 }
